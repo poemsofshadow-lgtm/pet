@@ -1,0 +1,6 @@
+{
+  "name": "Gestão de Banho e Tosa",
+  "description": "Sistema completo para gerenciamento de banho e tosa, incluindo cadastro de clientes, pets, agendamentos, controle de pacotes e histórico de atendimentos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
