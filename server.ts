@@ -409,11 +409,14 @@ const getLojaId = (req: express.Request): string => {
   return (req.headers['x-loja-id'] || req.query.lojaId || 'demo-store') as string;
 };
 
-// Seed store default schedules, services and packages
+// Seed store default schedules, services and packages using an atomic WriteBatch to maximize speed and prevent timeouts on Vercel
 async function seedStoreDefaults(lojaId: string) {
+  const batch = firestoreDb.batch();
+
   // Insert default working hours
   for (const h of DEFAULT_HORARIOS) {
-    await firestoreDb.collection('horarios').doc(`day-${h.diaSemana}-${lojaId}`).set({
+    const docRef = firestoreDb.collection('horarios').doc(`day-${h.diaSemana}-${lojaId}`);
+    batch.set(docRef, {
       diaSemana: h.diaSemana,
       nomeDia: h.nomeDia,
       aberto: h.aberto,
@@ -425,7 +428,8 @@ async function seedStoreDefaults(lojaId: string) {
 
   // Insert default services
   for (const s of INITIAL_SERVICOS) {
-    await firestoreDb.collection('servicos').doc(`${s.id}-${lojaId}`).set({
+    const docRef = firestoreDb.collection('servicos').doc(`${s.id}-${lojaId}`);
+    batch.set(docRef, {
       nome: s.nome,
       valor: s.valor,
       lojaId
@@ -433,7 +437,8 @@ async function seedStoreDefaults(lojaId: string) {
   }
 
   // Ensure srv-transporte exists
-  await firestoreDb.collection('servicos').doc(`srv-transporte-${lojaId}`).set({
+  const transDocRef = firestoreDb.collection('servicos').doc(`srv-transporte-${lojaId}`);
+  batch.set(transDocRef, {
     nome: 'Taxa de Transporte (Leva e Trás)',
     valor: 5.00,
     lojaId
@@ -441,7 +446,8 @@ async function seedStoreDefaults(lojaId: string) {
 
   // Insert default packages
   for (const p of INITIAL_PACOTES) {
-    await firestoreDb.collection('pacotes').doc(`${p.id}-${lojaId}`).set({
+    const docRef = firestoreDb.collection('pacotes').doc(`${p.id}-${lojaId}`);
+    batch.set(docRef, {
       nome: p.nome,
       descricao: p.descricao,
       valor: p.valor,
@@ -449,6 +455,8 @@ async function seedStoreDefaults(lojaId: string) {
       lojaId
     });
   }
+
+  await batch.commit();
 }
 
 // Seeding function
