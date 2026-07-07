@@ -8,7 +8,7 @@ import path from 'path';
 import fs from 'fs';
 import { Firestore } from '@google-cloud/firestore';
 import { createServer as createViteServer } from 'vite';
-import Database from 'better-sqlite3';
+let Database: any = null;
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
   getFirestore, 
@@ -34,21 +34,15 @@ import {
   INITIAL_HISTORICO
 } from './src/data/initialData';
 
+import firebaseConfigJson from './firebase-applet-config.json';
+
 export const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 const PORT = 3000;
 
 // Initialize Firestore from config file
-const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-let firebaseConfig: any = {};
-if (fs.existsSync(configPath)) {
-  try {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch (e) {
-    console.error('Error parsing firebase-applet-config.json:', e);
-  }
-}
+const firebaseConfig: any = firebaseConfigJson;
 
 class DocumentSnapshot {
   constructor(public id: string, private _data: any, public ref: any) {}
@@ -139,18 +133,37 @@ class WriteBatch {
 }
 
 class SQLiteFirestoreEngine {
-  private sqliteDb: any;
+  private _sqliteDb: any = null;
 
-  constructor() {
-    this.sqliteDb = new Database('data.db');
-    this.sqliteDb.exec(`
-      CREATE TABLE IF NOT EXISTS firestore_data (
-        collection TEXT,
-        id TEXT,
-        data TEXT,
-        PRIMARY KEY (collection, id)
-      )
-    `);
+  constructor() {}
+
+  private get sqliteDb() {
+    if (!this._sqliteDb) {
+      if (!Database) {
+        try {
+          Database = require('better-sqlite3');
+        } catch (e: any) {
+          console.error('Failed to load better-sqlite3 dynamically:', e.message);
+          throw new Error('SQLite database engine is not available in this environment.');
+        }
+      }
+      const dbPath = process.env.VERCEL ? '/tmp/data.db' : 'data.db';
+      try {
+        this._sqliteDb = new Database(dbPath);
+        this._sqliteDb.exec(`
+          CREATE TABLE IF NOT EXISTS firestore_data (
+            collection TEXT,
+            id TEXT,
+            data TEXT,
+            PRIMARY KEY (collection, id)
+          )
+        `);
+      } catch (err: any) {
+        console.error('Failed to initialize SQLite file:', err.message);
+        throw err;
+      }
+    }
+    return this._sqliteDb;
   }
 
   async getDoc(collectionName: string, docId: string) {
@@ -323,7 +336,7 @@ class SelfHealingDb {
   private nativeDb: Firestore;
   private sqliteEngine: SQLiteFirestoreEngine;
   private clientEngine: ClientFirestoreEngine | null = null;
-  public mode: 'native' | 'client' | 'sqlite' = 'native';
+  public mode: 'native' | 'client' | 'sqlite' = process.env.VERCEL ? 'client' : 'native';
 
   constructor() {
     this.nativeDb = new Firestore({
@@ -1317,6 +1330,11 @@ app.post('/api/backup/import', async (req, res) => {
 
 // Vite Integration as Middleware
 async function startServer() {
+  if (process.env.VERCEL) {
+    console.log('Running on Vercel: skipping startup database testing/seeding to optimize cold start times.');
+    return;
+  }
+
   // Test native Firestore connection and fallback to Client SDK or SQLite as needed
   try {
     console.log('Testing native Firestore connection...');
