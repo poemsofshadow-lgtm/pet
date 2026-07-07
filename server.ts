@@ -5,7 +5,6 @@
 
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { Firestore } from '@google-cloud/firestore';
 import { createServer as createViteServer } from 'vite';
@@ -35,15 +34,7 @@ import {
   INITIAL_HISTORICO
 } from './src/data/initialData';
 
-// Resolve directory name (work with both ESM and CJS formats)
-const _filename = typeof import.meta !== 'undefined' && import.meta.url
-  ? fileURLToPath(import.meta.url)
-  : __filename;
-const _dirname = typeof import.meta !== 'undefined' && import.meta.url
-  ? path.dirname(_filename)
-  : __dirname;
-
-const app = express();
+export const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 const PORT = 3000;
@@ -1524,23 +1515,27 @@ async function startServer() {
     console.error('Error during Firestore initialization/seeding:', error);
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+  if (!process.env.VERCEL) {
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running at http://localhost:${PORT}`);
     });
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-  });
 }
 
 startServer();
+
+export default app;
