@@ -11,7 +11,7 @@ import { createServer as createViteServer } from 'vite';
 let Database: any = null;
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
-  getFirestore, 
+  initializeFirestore, 
   collection as clientCollection, 
   doc as clientDoc, 
   getDoc as clientGetDoc, 
@@ -285,7 +285,9 @@ class ClientFirestoreEngine {
       messagingSenderId: firebaseConfig.messagingSenderId,
       appId: firebaseConfig.appId
     }) : getApp();
-    this.db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    this.db = initializeFirestore(app, {
+      experimentalForceLongPolling: true
+    }, firebaseConfig.firestoreDatabaseId);
   }
 
   async getDoc(collectionName: string, docId: string) {
