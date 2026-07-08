@@ -12,6 +12,7 @@ let Database: any = null;
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
   initializeFirestore, 
+  getFirestore as clientGetFirestore,
   collection as clientCollection, 
   doc as clientDoc, 
   getDoc as clientGetDoc, 
@@ -285,9 +286,14 @@ class ClientFirestoreEngine {
       messagingSenderId: firebaseConfig.messagingSenderId,
       appId: firebaseConfig.appId
     }) : getApp();
-    this.db = initializeFirestore(app, {
-      experimentalForceLongPolling: true
-    }, firebaseConfig.firestoreDatabaseId);
+    
+    try {
+      this.db = initializeFirestore(app, {
+        experimentalForceLongPolling: true
+      }, firebaseConfig.firestoreDatabaseId);
+    } catch (e) {
+      this.db = clientGetFirestore(app, firebaseConfig.firestoreDatabaseId);
+    }
   }
 
   async getDoc(collectionName: string, docId: string) {
@@ -335,16 +341,22 @@ class ClientFirestoreEngine {
 }
 
 class SelfHealingDb {
-  private nativeDb: Firestore;
+  private _nativeDb: Firestore | null = null;
   private sqliteEngine: SQLiteFirestoreEngine;
   private clientEngine: ClientFirestoreEngine | null = null;
   public mode: 'native' | 'client' | 'sqlite' = process.env.VERCEL ? 'client' : 'native';
 
+  get nativeDb(): Firestore {
+    if (!this._nativeDb) {
+      this._nativeDb = new Firestore({
+        projectId: firebaseConfig.projectId || 'demo-project',
+        databaseId: firebaseConfig.firestoreDatabaseId || '(default)',
+      });
+    }
+    return this._nativeDb;
+  }
+
   constructor() {
-    this.nativeDb = new Firestore({
-      projectId: firebaseConfig.projectId || 'demo-project',
-      databaseId: firebaseConfig.firestoreDatabaseId || '(default)',
-    });
     this.sqliteEngine = new SQLiteFirestoreEngine();
     try {
       if (firebaseConfig.apiKey) {
