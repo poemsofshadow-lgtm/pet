@@ -41,16 +41,23 @@ export default function BackupRestore({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  const handleDownloadZip = async () => {
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  const handleDownloadZip = async (pwd: string) => {
     setIsDownloading(true);
     setDownloadError(null);
     try {
       // Usamos cache: 'no-store' e parâmetro dinâmico para garantir que o navegador ou proxy
       // não sirva uma página HTML antiga em cache (o que causava o erro de arquivo corrompido)
-      const response = await fetch(`/api/download-zip?t=${Date.now()}`, {
+      const response = await fetch(`/api/download-zip?password=${encodeURIComponent(pwd)}&t=${Date.now()}`, {
         cache: 'no-store'
       });
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Senha de administrador incorreta.');
+        }
         throw new Error('Erro ao gerar ou baixar o arquivo ZIP.');
       }
       const blob = await response.blob();
@@ -68,6 +75,11 @@ export default function BackupRestore({
         link.parentNode.removeChild(link);
       }
       window.URL.revokeObjectURL(url);
+
+      // Limpar estados em caso de sucesso
+      setShowPasswordPrompt(false);
+      setPasswordInput('');
+      setPasswordError(null);
     } catch (err: any) {
       console.error(err);
       setDownloadError(err.message || 'Falha ao baixar o projeto.');
@@ -239,17 +251,72 @@ export default function BackupRestore({
           Para hospedar este projeto em outros servidores (como Netlify, Vercel ou VPS), ou simplesmente guardar uma cópia local, você pode baixar o código fonte atualizado. O pacote conterá toda a estrutura do app (React + Vite + Tailwind + Express) pronta para ser executada.
         </p>
 
-        <div className="pt-1 space-y-2">
-          <button
-            onClick={handleDownloadZip}
-            disabled={isDownloading}
-            className={`inline-flex items-center gap-2 text-white px-5 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-xs decoration-none ${
-              isDownloading ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
-            }`}
-          >
-            <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
-            <span>{isDownloading ? 'Preparando arquivo ZIP...' : 'Baixar Projeto Completo (projeto.zip)'}</span>
-          </button>
+        <div className="pt-1 space-y-3">
+          {!showPasswordPrompt ? (
+            <button
+              onClick={() => {
+                setShowPasswordPrompt(true);
+                setPasswordError(null);
+                setPasswordInput('');
+              }}
+              disabled={isDownloading}
+              className={`inline-flex items-center gap-2 text-white px-5 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-xs decoration-none ${
+                isDownloading ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
+              }`}
+            >
+              <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
+              <span>{isDownloading ? 'Preparando arquivo ZIP...' : 'Baixar Projeto Completo (projeto.zip)'}</span>
+            </button>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (passwordInput !== '369251' && passwordInput !== 'Ifsenha=369251') {
+                  setPasswordError('Senha incorreta! Digite a senha correta para autorizar o download.');
+                  return;
+                }
+                setPasswordError(null);
+                handleDownloadZip(passwordInput);
+              }}
+              className="space-y-3 p-4 rounded-lg bg-slate-50 border border-slate-200 max-w-md animate-fade-in"
+            >
+              <p className="text-xs font-medium text-slate-700">
+                Esta ação requer autenticação de Administrador:
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  placeholder="Senha de administrador"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs w-full focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  required
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={isDownloading}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap"
+                >
+                  Confirmar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordPrompt(false);
+                    setPasswordInput('');
+                    setPasswordError(null);
+                  }}
+                  className="bg-white border border-slate-250 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+              </div>
+              {passwordError && (
+                <p className="text-xs text-rose-600 font-medium">{passwordError}</p>
+              )}
+            </form>
+          )}
           
           {downloadError && (
             <p className="text-xs text-rose-600 font-medium">

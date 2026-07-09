@@ -7,7 +7,6 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { Firestore } from '@google-cloud/firestore';
-import { createServer as createViteServer } from 'vite';
 let Database: any = null;
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
@@ -35,15 +34,21 @@ import {
   INITIAL_HISTORICO
 } from './src/data/initialData';
 
-import firebaseConfigJson from './firebase-applet-config.json';
-
 export const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 const PORT = 3000;
 
-// Initialize Firestore from config file
-const firebaseConfig: any = firebaseConfigJson;
+// Initialize Firestore from config file safely using fs to prevent ESM JSON import errors on Vercel
+let firebaseConfig: any = {};
+try {
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  }
+} catch (e) {
+  console.error('Failed to read firebase-applet-config.json:', e);
+}
 
 class DocumentSnapshot {
   constructor(public id: string, private _data: any, public ref: any) {}
@@ -802,6 +807,11 @@ app.put('/api/auth/profile', async (req, res) => {
 
 // Dynamic Project ZIP downloader endpoint
 app.get('/api/download-zip', async (req, res) => {
+  const password = req.query.password || req.query.senha;
+  if (password !== '369251' && password !== 'Ifsenha=369251') {
+    return res.status(403).send('Acesso negado: Senha de administrador incorreta.');
+  }
+
   try {
     const { exec } = await import('child_process');
     const zipPath = path.join(process.cwd(), 'projeto.zip');
@@ -1557,6 +1567,7 @@ async function startServer() {
 
   if (!process.env.VERCEL) {
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: 'spa',
